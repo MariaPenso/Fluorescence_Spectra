@@ -3,3 +3,5 @@ A reference library of Excitation-Emission Matrix (EEM) fluorescence spectra col
 Spectra were acquired using the Horiba FluoroMax Plus bench-top spectrofluorometer at the University of Minho.
 This repository is intended as an open-access spectral archive for researchers, educators, and practitioners working with plastic identification and characterisation.
 This dataset focuses on post-consumer plastic packaging and everyday-use products labelled with the Resin Identification Code (RIC) as defined by ASTM D7611. 
+
+
