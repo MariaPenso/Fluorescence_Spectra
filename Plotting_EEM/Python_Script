@@ -1,0 +1,148 @@
+# %% 1) Imports and definitions
+import io
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm, PowerNorm
+from matplotlib.ticker import FuncFormatter
+import ipywidgets as widgets
+from google.colab import files
+from IPython.display import display
+
+# --- Adjust here -----------------------------------------------------
+EX_START = 245.0   # first excitation wavelength, only used for files WITHOUT a header
+EX_STEP  = 5.0     # excitation step (nm)
+
+SCALE    = "log"      # "log", "gamma", "percentile" or "linear"
+GAMMA    = 0.3        # only for SCALE="gamma" (smaller = stronger boost of weak signal)
+PERCENTILE = 99.5     # only for SCALE="percentile"
+VMIN_PCT = 1          # in "log": the scale minimum is this percentile of the data
+
+CMAP     = "turbo"    # many distinct colours. Alternatives: "nipy_spectral", "jet", "viridis"
+N_LEVELS = 40         # number of colour steps (bands). None = continuous scale
+
+SHOW_ZOOM = True      # True: adds a 2nd panel with the scale stretched onto the weak signal
+ZOOM_PCT = 90         # in the zoom panel, the top of the scale is this percentile (scatter saturates)
+ZOOM_VMAX = None      # fixed top of the zoom scale in counts (e.g. 1.5e6). None = automatic (ZOOM_PCT)
+# ---------------------------------------------------------------------
+
+
+def load_eem(source):
+    """Reads an .xlsx file (path or bytes). Detects 2 formats:
+    (a) with header: row 1 = title, row 2 = excitation, column 1 = emission
+    (b) without header: column 1 = emission, remaining columns = excitation (EX_START, EX_STEP)
+    Returns ex, em, eem with shape (n_emission, n_excitation)."""
+    raw = pd.read_excel(source, header=None)
+    if isinstance(raw.iloc[0, 0], str):                      # format (a)
+        d = raw.iloc[2:].astype(float)
+        em = d.iloc[:, 0].to_numpy()
+        ex = raw.iloc[1, 1:].astype(float).to_numpy()
+        eem = d.iloc[:, 1:].to_numpy()
+    else:                                                     # format (b)
+        d = raw.astype(float)
+        em = d.iloc[:, 0].to_numpy()
+        eem = d.iloc[:, 1:].to_numpy()
+        ex = EX_START + EX_STEP * np.arange(eem.shape[1])
+    return ex, em, eem
+
+
+def _sci(x, pos=None):
+    """Tick label in powers of ten, e.g. 2.5 x 10^5."""
+    if x == 0:
+        return "0"
+    exp = int(np.floor(np.log10(abs(x))))
+    mant = round(x / 10 ** exp, 2)
+    if mant == 10:
+        mant, exp = 1, exp + 1
+    return rf"${mant:g}\times10^{{{exp}}}$"
+
+
+def _zoom_norm(eem):
+    vmax = ZOOM_VMAX if ZOOM_VMAX else np.percentile(eem, ZOOM_PCT)
+    return PowerNorm(gamma=1, vmin=0, vmax=vmax)
+
+
+def _norm(eem, scale):
+    if scale == "log":
+        d = np.clip(eem, 1, None)
+        return LogNorm(vmin=np.percentile(d, VMIN_PCT), vmax=d.max())
+    if scale == "gamma":
+        return PowerNorm(gamma=GAMMA, vmin=0, vmax=eem.max())
+    if scale == "percentile":
+        return PowerNorm(gamma=1, vmin=0, vmax=np.percentile(eem, PERCENTILE))
+    return PowerNorm(gamma=1, vmin=0, vmax=eem.max())         # linear
+
+
+def _panel(ax, ex, em, eem, norm, title):
+    cmap = plt.get_cmap(CMAP, N_LEVELS) if N_LEVELS else plt.get_cmap(CMAP)
+    d = np.clip(eem, 1, None) if isinstance(norm, LogNorm) else eem
+    im = ax.pcolormesh(em, ex, d.T, shading="nearest", cmap=cmap, norm=norm)
+    cbar = plt.colorbar(im, ax=ax, label="Intensity (counts)")
+    if not isinstance(norm, LogNorm):            # log scale already shows powers of ten
+        cbar.formatter = FuncFormatter(_sci)
+        cbar.update_ticks()
+    ax.set_xlabel("Emission (nm)")
+    ax.set_ylabel("Excitation (nm)")
+    ax.set_title(title)
+
+
+def plot_eem(ex, em, eem, title=""):
+    """Left panel: full scale (SCALE). Right panel (optional):
+    linear scale stretched onto the weak signal, with the scatter saturated."""
+    n = 2 if SHOW_ZOOM else 1
+    fig, axs = plt.subplots(1, n, figsize=(6.5 * n, 5))
+    axs = np.atleast_1d(axs)
+    _panel(axs[0], ex, em, eem, _norm(eem, SCALE), f"{title} ({SCALE})")
+    if SHOW_ZOOM:
+        _panel(axs[1], ex, em, eem, _zoom_norm(eem), f"{title} (zoom on signal)")
+    plt.tight_layout()
+    return fig
+
+
+def _single_figure(ex, em, eem, title, mode):
+    """Figure with ONE panel: mode='normal' (full scale) or 'zoom'."""
+    fig, ax = plt.subplots(figsize=(6.5, 5))
+    if mode == "normal":
+        _panel(ax, ex, em, eem, _norm(eem, SCALE), title)
+    else:
+        _panel(ax, ex, em, eem, _zoom_norm(eem), f"{title} (zoom on signal)")
+    fig.tight_layout()
+    return fig
+
+
+def download_button(ex, em, eem, name, mode, label):
+    """Creates a button that, when clicked, generates the PNG (300 dpi) and downloads it."""
+    base = name.replace(".xlsx", "")
+    filename = f"{base}_EEM_{mode}.png"
+    button = widgets.Button(description=label, icon="download",
+                            layout=widgets.Layout(width="270px"))
+    output = widgets.Output()
+
+    def on_click(_):
+        fig = _single_figure(ex, em, eem, base, mode)
+        fig.savefig(filename, dpi=300)
+        plt.close(fig)
+        with output:
+            files.download(filename)
+
+    button.on_click(on_click)
+    return widgets.VBox([button, output])
+
+
+# %% 2) Load files (opens a dialog to choose the .xlsx files)
+uploaded = files.upload()          # you can select several files at once
+
+# %% 3) Plot the EEMs and show the download buttons
+data = {}
+for name, content in uploaded.items():
+    ex, em, eem = load_eem(io.BytesIO(content))
+    data[name] = (ex, em, eem)
+    print(f"{name}: {eem.shape[1]} excitations ({ex.min():.0f}-{ex.max():.0f} nm), "
+          f"{eem.shape[0]} emissions ({em.min():.0f}-{em.max():.0f} nm), "
+          f"max = {eem.max():.3g}")
+    plot_eem(ex, em, eem, title=name.replace(".xlsx", ""))
+    plt.show()
+    display(widgets.HBox([
+        download_button(ex, em, eem, name, "normal", "Download EEM (normal)"),
+        download_button(ex, em, eem, name, "zoom",   "Download EEM (zoom)"),
+    ]))
