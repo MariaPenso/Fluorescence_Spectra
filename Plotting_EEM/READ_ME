@@ -1,0 +1,11 @@
+ready-to-use notebook to visualise them in your browser. No installation needed.
+
+The data are shown raw, with no scatter filtering: first-order Rayleigh scattering (Em = Ex) and the second-order harmonic (Em = 2·Ex) are left in the maps.
+
+Quick start
+Open Google Colab
+In Colab, choose Runtime → Run all (a Google account is required).
+Pick a sample from the drop-down menu. Each EEM is drawn twice:
+left: full colour scale (logarithmic by default), so the scatter and the weak signal are both visible;
+right: "zoom" scale, with the colours stretched onto the weak signal (the scatter saturates).
+Use the Download buttons under the plot to save the normal or zoom version as a PNG (300 dpi).
