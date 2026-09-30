@@ -5,3 +5,6 @@ This repository is intended as an open-access spectral archive for researchers, 
 This dataset focuses on post-consumer plastic packaging and everyday-use products labelled with the Resin Identification Code (RIC) as defined by ASTM D7611. 
 
 Although multiple samples of the same product type are present, no packaging item was sampled more than once, thereby ensuring the independence and representativeness of the data set. All samples were cleaned with alcohol following collection.
+
+
+
